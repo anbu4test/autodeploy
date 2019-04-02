@@ -191,15 +191,15 @@ fi
    echo -e "Attempting to remove local copies.."
    if [ -f ROOT.war ] || [ -d $pname ]; then 
        rm -rf $buildDir
-       echo -e "Removed successfully." ; hline ; exit 0
+       echo -e "Removed successfully."
    else
-       echo -e "${R}ERR!!${NC}File not found."; exit 1
+       echo -e "${R}ERR!!${NC}File not found.";
    fi
    # Remove old backups
    cd ${bkpdir}; fc=`ls -1rt ${pname}* | wc -l`
    if [ $fc > $maxkeep  ];then
    echo -e "\nRemoving Old backup file.."
-   ls -1rt ${pname}* | head -n $maxkeep | xargs rm -v
+   ls -1rt ${pname}* | head -n -$maxkeep | xargs rm -v
    hline ; exit 0
    fi
 }
