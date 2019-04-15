@@ -3,8 +3,8 @@
 ###################################################################
 #Script Name	: build.sh                                                                                            
 #Description	: Application deployment automation script
-#Date		: 27/03/2019
-#Version        : v1.5                                                           
+#Date		: 15/04/2019
+#Version        : v1.6                                                           
 #Args           :                                                                                          
 #Author       	: Anbazhagan Kali                                      
 #Email         	: kali.anbazhagan@mahindra.com                                   
@@ -175,10 +175,31 @@ else
     exit 0;
 fi
 
+#Repo URL check
+url_count=$(grep -c 'repo_url' $configfile)
+
+if [ $url_count -gt 1  ]; then
+    urlopt=($(grep 'repo_url' appserv.config | cut -d "=" -f 2 | sed -e 's/^\s*//' -e '/^$/d' -e 's/"//g'))
+    urls=$(printf '%s ' "${urlopt[@]}")
+    echo -e "\n${Y}Mutiple repo url found. Please choose any one.${NC}\n"
+    PS3="repurl (1-$url_count): "
+    select repurl  in $urls
+    do
+        if [[ -z $repurl  ]]; then
+            echo "Invalid Choice: '$REPLY'" >&2
+        else
+            break
+        fi
+    done
+else
+   repurl=$repo_url
+fi
+
+
 #git clone
    cd ${buildDir}
    echo -e "Fetching code from BitBucket repository-----: ${Y}$pname${NC}"
-   git clone $repo_url/${pname}.git && printf "\n"
+   git clone $repurl/${pname}.git && printf "\n"
    	if [ -f ${dep_path}/ROOT.war ]; then
 	echo -e "${Y}Taking backup of current application...${NC}"
 	cp -iv $dep_path/ROOT.war ${bkpdir}/${bkp_name} && printf "\n"
