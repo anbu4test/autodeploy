@@ -52,6 +52,7 @@ hline() {
 source appserv.config
 
 # Required Variables
+configfile=appserv.config
 prop_file=build.properties
 bkp_name="$pname"_$(date +%d-%m-%Y_%H:%M).war
 dep_path=$webdir/$dname/webapp
