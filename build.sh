@@ -3,8 +3,8 @@
 ###################################################################
 #Script Name	: build.sh                                                                                            
 #Description	: Application deployment automation script
-#Date		: 15/04/2019
-#Version        : v1.6                                                           
+#Date		: 01/11/2019
+#Version        : v1.7                                                           
 #Args           :                                                                                          
 #Author       	: Anbazhagan Kali                                      
 #Email         	: kali.anbazhagan@mahindra.com                                   
@@ -18,7 +18,7 @@ B='\033[0;34m'
 M='\033[0;35m'
 C='\033[0;36m'
 NC='\033[0m'
-
+bold="$(tput bold)"
 
 
 #script initialization with valid arguments
@@ -43,10 +43,33 @@ if [ -z "${pname}" ] || [ -z "${dname}" ]; then
     usage
 fi
 
+## Common print functions
+print_status() {
+  local outp=$(echo "$1") # | sed -r 's/\\n/\\n## /mg')
+  echo
+  echo -e "## ${outp}"
+}
+
+print_bold() {
+    title="$1"
+
+    echo -e "${R}================================================================================${NC}"
+    echo -e "  ${bold}${Y}${title}${NC}"
+    echo -e "${R}================================================================================${NC}"
+}
+
 #Print line
 hline() { 
     printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' - 
 }
+
+# Write log file
+log() {
+    tag=$1
+    text=$2
+    echo `date +"%F %T %Z"` $tag $text >> $logfile
+}
+
 
 # Source configuration files
 source appserv.config
@@ -57,10 +80,10 @@ prop_file=build.properties
 bkp_name="$pname"_$(date +%d-%m-%Y_%H:%M).war
 dep_path=$webdir/$dname/webapp
 httpdir=/etc/httpd/conf.d
+logfile=$(echo "$(cd "$(dirname "$1")"; pwd -P)")/logs/build.log
 
 clear
-printf "executing script....\n\n" 
-
+print_status "executing script..."
 
 #Virtual host configuration
 vhsetup() {
@@ -163,31 +186,31 @@ tomcat.manager.username=$username
 tomcat.manager.password=$password" > $buildDir/${prop_file}
 
 if [ $? == 0  ]; then
-    echo -e "Creating Properties file...\t\t [${G}SUCCESS${NC}]"
+    print_status "Creating Properties file...\t\t [${G}SUCCESS${NC}]"
 else
-    echo -e "Creating Properties file...\t\t [${R}FAILED${NC}]" ; exit 1
+    print_status "Creating Properties file...\t\t [${R}FAILED${NC}]" ; exit 1
 fi
 
 if [ -f ${dname}.xml ]; then
-    echo -e "Build XML file found-----------: ${Y}${dname}.xml${NC}"
-    cp -f ${dname}.xml $buildDir/build.xml && printf '\n'
+    print_status "Build XML file found-----------: ${Y}${dname}.xml${NC}"
+    cp -f ${dname}.xml $buildDir/build.xml
 else
-    echo -e "${R}ERR!! Build XML file not found.${NC}\n${Y}Please generate XML file and try again.${NC}"
+    print_status "${R}ERR!! Build XML file not found.${NC}\n${Y}Please generate XML file and try again.${NC}"
     exit 0;
 fi
 
 #Repo URL check
-url_count=$(grep -c 'repo_url' $configfile)
+url_count=$(grep -c '^repo_url' $configfile)
 
 if [ $url_count -gt 1  ]; then
-    urlopt=($(grep 'repo_url' appserv.config | cut -d "=" -f 2 | sed -e 's/^\s*//' -e '/^$/d' -e 's/"//g'))
+    urlopt=($(grep '^repo_url' appserv.config | cut -d "=" -f 2 | sed -e 's/^\s*//' -e '/^$/d' -e 's/"//g'))
     urls=$(printf '%s ' "${urlopt[@]}")
-    echo -e "\n${Y}Mutiple repo url found. Please choose any one.${NC}\n"
+    print_status "${Y}Mutiple repo url found. Please choose any one.${NC}\n"
     PS3="repurl (1-$url_count): "
     select repurl  in $urls
     do
         if [[ -z $repurl  ]]; then
-            echo "Invalid Choice: '$REPLY'" >&2
+            echo -e "${R}Invalid Choice:${NC} '$REPLY'" >&2
         else
             break
         fi
@@ -198,29 +221,55 @@ fi
 
 
 #git clone
+   if [[ $build_detail == 1 ]]; then
+       print_bold "* Change Log required to continue"
+       read -ep "Enter Change Log in brief : " chlog
+       # Check if string is empty
+       if [[ -z "$chlog" ]]; then
+           echo -e "${R}No input entered${NC}"
+           exit 1
+       fi
+
+       read -ep "Enter Developer Name      : " devname
+       # Check if string is empty
+       if [[ -z "$devname" ]]; then
+           echo -e "${R}No input entered${NC}"
+           exit 1
+       fi
+   fi
+
    cd ${buildDir}
-   echo -e "Fetching code from BitBucket repository-----: ${Y}$pname${NC}"
-   git clone $repurl/${pname}.git && printf "\n"
+   print_status "Fetching code from BitBucket repository-----: ${Y}$pname${NC}"
+   git clone $repurl/${pname}.git
+
    	if [ -f ${dep_path}/ROOT.war ]; then
-	echo -e "${Y}Taking backup of current application...${NC}"
+	print_status "${Y}Taking backup of current application...${NC}"
 	cp -iv $dep_path/ROOT.war ${bkpdir}/${bkp_name} && printf "\n"
 	fi
-   printf "\n"
-   logger "$0 Build Process started."
+
+   logger "$0 Build Process started for '$dname'"
+   log INFO "$0: Build Process Started. CN=$dname DEV=$devname MSG=$chlog"
    ant war
+
+   if [ $? -eq 0 ]; then
+       log INFO "$0: BUILD SUCCESSFULL"
+   else
+       log ERROR "$0: BUILD FAILED"
+   fi
+
    hline ; sleep 1 ;
    #Remove local copies
-   echo -e "Attempting to remove local copies.."
+   print_status "Attempting to remove local copies.."
    if [ -f ROOT.war ] || [ -d $pname ]; then 
        rm -rf $buildDir
-       echo -e "Removed successfully."
+       print_status "Removed successfully."
    else
-       echo -e "${R}ERR!!${NC}File not found.";
+       print_status "${R}ERR!!${NC}File not found.";
    fi
    # Remove old backups
    cd ${bkpdir}; fc=`ls -1rt ${pname}* | wc -l`
    if [ $fc > $maxkeep  ];then
-   echo -e "\nRemoving Old backup file.."
+   print_status "Removing Old backup file.."
    ls -1rt ${pname}* | head -n -$maxkeep | xargs rm -v
    hline ; exit 0
    fi
@@ -230,20 +279,20 @@ fi
 restore() {
 read -n 1 -rep "Are you sure to continue (Y/N)? " ans
 case $ans in
-        [Yy]* ) echo "Restoring backup file.."
+        [Yy]* ) print_status "Restoring backup file.."
                 cp -v $res_file $dep_path/ROOT.war
                 if [ $? == 0  ]; then
 		    logger "$0 Application $pname restored from $res_file"
-                    echo -e "\nRestore from backup...\t\t [${G}SUCCESS${NC}]"
+                    print_status "Restore from backup...\t\t [${G}SUCCESS${NC}]"
                 else
 		    logger "$0 Application $pname Restore Failed."
-                    echo -e "\nRestore from backup...\t\t [${R}FAILED${NC}]" ; exit 1
+                    print_status "Restore from backup...\t\t [${R}FAILED${NC}]" ; exit 1
                 fi
                 hline
                 ;;
         [Nn]* ) logger "$0: Application $pname Restore cancelled."
 		printf "\n${Y}Aborted.\n${NC}" ;;
-        * ) 	echo -e "${B}Please answer yes or no.${NC}"
+        * ) 	print_status "${B}Please answer yes or no.${NC}"
 		restore ;;
     esac
 
