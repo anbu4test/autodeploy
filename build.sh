@@ -3,8 +3,8 @@
 ###################################################################
 #Script Name	: build.sh                                                                                            
 #Description	: Application deployment automation script
-#Date		: 01/11/2019
-#Version        : v1.7                                                           
+#Date		: 19/11/2019
+#Version        : v1.8                                                           
 #Args           :                                                                                          
 #Author       	: Anbazhagan Kali                                      
 #Email         	: kali.anbazhagan@mahindra.com                                   
@@ -242,19 +242,31 @@ fi
    print_status "Fetching code from BitBucket repository-----: ${Y}$pname${NC}"
    git clone $repurl/${pname}.git
 
-   	if [ -f ${dep_path}/ROOT.war ]; then
+   if [[ $? == 128 ]]; then
+	print_status "${R}ERR!!${NC} Invalid Username or Password."; exit 1;
+   fi
+
+   if [[ $deploy_env == "prod" ]]; then
+        grep "^jdbc.url.*$rdsendpoint" $pname/$dbcon_file > /dev/null
+        if (( $? )); then
+        	print_status "${R}ERR!!${NC} RDS Endpoint mismatch. Check DB Connection File."; exit 1;
+        fi
+   fi
+
+   if [ -f ${dep_path}/ROOT.war ]; then
 	print_status "${Y}Taking backup of current application...${NC}"
 	cp -iv $dep_path/ROOT.war ${bkpdir}/${bkp_name} && printf "\n"
-	fi
+   fi
 
    logger "$0 Build Process started for '$dname'"
    log INFO "$0: Build Process Started. CN=$dname DEV=$devname MSG=$chlog"
+
    ant war
 
    if [ $? -eq 0 ]; then
-       log INFO "$0: BUILD SUCCESSFULL"
+   	log INFO "$0: BUILD SUCCESSFULL"
    else
-       log ERROR "$0: BUILD FAILED"
+   	log ERROR "$0: BUILD FAILED"
    fi
 
    hline ; sleep 1 ;
